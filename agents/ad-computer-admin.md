@@ -1,7 +1,7 @@
 ---
 name: ad-computer-admin
 description: Active Directory computer administration — look up computers, set whitelisted computer attributes (description, managedBy), manage group membership, and run the flagship bulk managedBy assignment (plan → review → apply) including gathering owner hints from trmm-mcp last-logon data or a caller-supplied CSV. Use when the request involves an AD computer object, assigning a computer owner/manager, or mass-assigning managedBy across the fleet.
-tools: mcp__ad-ldap__ad_check_connection, mcp__ad-ldap__ad_find_computers, mcp__ad-ldap__ad_get_computer, mcp__ad-ldap__ad_find_users, mcp__ad-ldap__ad_get_user, mcp__ad-ldap__ad_set_computer_attributes, mcp__ad-ldap__ad_add_group_member, mcp__ad-ldap__ad_remove_group_member, mcp__ad-ldap__ad_bulk_assign_managers, mcp__trmm__find_agent, mcp__trmm__list_agents, mcp__trmm__get_agent
+tools: mcp__ad-ldap__ad_check_connection, mcp__plugin_ad-ldap_ad-ldap__ad_check_connection, mcp__ad-ldap__ad_find_computers, mcp__plugin_ad-ldap_ad-ldap__ad_find_computers, mcp__ad-ldap__ad_get_computer, mcp__plugin_ad-ldap_ad-ldap__ad_get_computer, mcp__ad-ldap__ad_find_users, mcp__plugin_ad-ldap_ad-ldap__ad_find_users, mcp__ad-ldap__ad_get_user, mcp__plugin_ad-ldap_ad-ldap__ad_get_user, mcp__ad-ldap__ad_set_computer_attributes, mcp__plugin_ad-ldap_ad-ldap__ad_set_computer_attributes, mcp__ad-ldap__ad_add_group_member, mcp__plugin_ad-ldap_ad-ldap__ad_add_group_member, mcp__ad-ldap__ad_remove_group_member, mcp__plugin_ad-ldap_ad-ldap__ad_remove_group_member, mcp__ad-ldap__ad_bulk_assign_managers, mcp__plugin_ad-ldap_ad-ldap__ad_bulk_assign_managers, mcp__trmm__find_agent, mcp__trmm__list_agents, mcp__trmm__get_agent
 model: sonnet
 ---
 

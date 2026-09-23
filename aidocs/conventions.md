@@ -25,6 +25,9 @@ the existing style.
   carry annotation hints (`destructiveHint`, `idempotentHint`, `readOnlyHint`).
 - One-line function docstrings (summary only — params/returns live in annotations);
   module docstrings carry the design notes.
+- A tool is named `mcp__ad-ldap__<tool>` on a hand-registered server and
+  `mcp__plugin_ad-ldap_ad-ldap__<tool>` when the plugin starts it. Agent `tools:` lists and
+  the guard's `AD_WRITES` pattern name both; a new tool goes in each.
 
 ## Error handling
 

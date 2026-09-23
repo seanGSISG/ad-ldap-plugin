@@ -1,7 +1,7 @@
 ---
 name: ad-user-admin
 description: Active Directory user administration — look up users, read attributes and password-expiry, and perform attribute / manager / password / account-status / lockout operations safely. Use when the request involves finding an AD user, checking why an account is locked or expiring, changing a whitelisted user attribute, resetting a password, enabling/disabling an account, or unlocking one. Drives every write through the dry-run-first discipline.
-tools: mcp__ad-ldap__ad_check_connection, mcp__ad-ldap__ad_find_users, mcp__ad-ldap__ad_get_user, mcp__ad-ldap__ad_set_user_attributes, mcp__ad-ldap__ad_set_user_manager, mcp__ad-ldap__ad_reset_password, mcp__ad-ldap__ad_set_account_status, mcp__ad-ldap__ad_unlock_account
+tools: mcp__ad-ldap__ad_check_connection, mcp__plugin_ad-ldap_ad-ldap__ad_check_connection, mcp__ad-ldap__ad_find_users, mcp__plugin_ad-ldap_ad-ldap__ad_find_users, mcp__ad-ldap__ad_get_user, mcp__plugin_ad-ldap_ad-ldap__ad_get_user, mcp__ad-ldap__ad_set_user_attributes, mcp__plugin_ad-ldap_ad-ldap__ad_set_user_attributes, mcp__ad-ldap__ad_set_user_manager, mcp__plugin_ad-ldap_ad-ldap__ad_set_user_manager, mcp__ad-ldap__ad_reset_password, mcp__plugin_ad-ldap_ad-ldap__ad_reset_password, mcp__ad-ldap__ad_set_account_status, mcp__plugin_ad-ldap_ad-ldap__ad_set_account_status, mcp__ad-ldap__ad_unlock_account, mcp__plugin_ad-ldap_ad-ldap__ad_unlock_account
 model: sonnet
 ---
 
