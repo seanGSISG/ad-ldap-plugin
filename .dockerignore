@@ -50,3 +50,10 @@ skills/
 .state/
 *.json
 !pyproject.toml
+
+# Plugin-only and doc files the server image never needs
+hooks/
+aidocs/
+CLAUDE.md
+bulk-review/
+node_modules/
