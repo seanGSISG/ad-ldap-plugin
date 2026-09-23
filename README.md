@@ -5,8 +5,7 @@ Active Directory administration from Claude Code, over LDAPS. One plugin install
 - an **MCP server** (FastMCP + `ldap3`) with 15 tools: 6 reads, 8 writes, 1 bulk
 - two **agents** (`ad-user-admin`, `ad-computer-admin`), two **commands** (`/ad-whois`,
   `/ad-assign-computer`) and a **safety skill**
-- a **write guard** that refuses any AD change until the identical call has been dry-run, then asks
-  you before it commits
+- a **write guard** that refuses any AD change until the identical call has been dry-run first
 
 Headline workflow: most computer objects have no `managedBy`, but the owner's name sits in
 `description`. `ad_bulk_assign_managers` matches those names to users and assigns `managedBy`
@@ -46,8 +45,9 @@ the `env` block of `~/.claude/settings.json`:
 "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
 ```
 
-Without it everything else works, and writes still default to `dry_run=true`, but nothing forces
-the dry run or asks before a commit.
+Without it everything else works and writes still default to `dry_run=true`, but nothing forces
+the dry run. The guard never prompts, so agents running batches and `claude -p` jobs work
+unattended as long as they dry-run each change first (in the same session).
 
 **4. Restart Claude Code and check the connection:**
 
@@ -90,11 +90,10 @@ Attribute writes are limited to fixed whitelists (see `mcp/ad_client.py`):
 - **LDAPS only.** `AD_USE_SSL=false` is rejected, because a simple bind would send the password in
   cleartext.
 - **Dry run first.** Every write returns a before → after diff unless you pass `dry_run=false`.
-  With the guard on, a commit is refused until the identical call dry-ran in this session, and then
-  you confirm it in a dialog. This holds in every permission mode, subagents included, and the
-  guard refuses the call if it fails itself.
-- **Passwords are never echoed.** `ad_reset_password` sends `unicodePwd` over LDAPS only, and the
-  guard masks it in the confirmation.
+  With the guard on, a commit is refused until the identical call dry-ran in this session. This
+  holds in every permission mode, subagents included, and the guard refuses the call if it fails
+  itself.
+- **Passwords are never echoed.** `ad_reset_password` sends `unicodePwd` over LDAPS only.
 
 ## Run as a shared HTTP container (optional)
 

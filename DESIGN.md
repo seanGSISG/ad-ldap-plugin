@@ -35,9 +35,9 @@ unmatched computers are skipped and reported for manual resolution. The `descrip
   TLS validation defaults on; documented insecure opt-out for the self-signed lab DC.
 - **Write guard (function hooks):** `hooks/guard.ts` hooks `tool.call` on the 9 write tools. A
   commit (`dry_run=false`, or `apply=true` for the bulk tool) is refused unless the identical call
-  (same target arguments, SHA-256 matched) dry-ran successfully this session, and then waits for
-  the user's yes through `$.ui.ask`, so it holds in every permission mode and inside subagents.
-  Its `.catch` refuses the call if the hook fails. It loads only where
+  (same target arguments, SHA-256 matched) dry-ran successfully this session. It never prompts, so
+  batch agents and headless `claude -p` runs work; it holds in every permission mode and inside
+  subagents, and its `.catch` refuses the call if the hook fails. It loads only where
   `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`; without it the server's dry-run defaults remain the
   safety net. `userConfig` fields are deliberately not `required`, because unmet required options
   stop the engine loading the hooks module at all.

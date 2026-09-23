@@ -1,8 +1,8 @@
 {
   "name": "ad-ldap",
   "displayName": "Active Directory (LDAP) Admin",
-  "version": "1.1.0",
-  "description": "Active Directory administration over LDAPS for Claude Code: an MCP server (FastMCP + ldap3) with 15 tools, admin agents, slash commands, a safety skill, and a guard that refuses any AD write until the identical call has been dry-run, then asks you. Headline workflow: mass-assign computer managedBy from description-held owner names via a dry-run plan/review/apply loop.",
+  "version": "1.2.0",
+  "description": "Active Directory administration over LDAPS for Claude Code: an MCP server (FastMCP + ldap3) with 15 tools, admin agents, slash commands, a safety skill, and a guard that refuses any AD write until the identical call has been dry-run first. Headline workflow: mass-assign computer managedBy from description-held owner names via a dry-run plan/review/apply loop.",
   "author": {
     "name": "seanGSISG"
   },

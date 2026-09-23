@@ -65,5 +65,5 @@ computer description fields:
 update those docs to match.
 
 `hooks/guard.ts` enforces the dry-run discipline mechanically: a commit is refused unless the
-identical call dry-ran this session, then the user confirms it (see `DESIGN.md`, "Write guard").
+identical call dry-ran this session. It never prompts (see `DESIGN.md`, "Write guard").
 Adding a write tool means adding it to the guard's `AD_WRITES` pattern and to `tests/guard.test.ts`.
