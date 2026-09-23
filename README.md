@@ -32,6 +32,7 @@ never to `settings.json`.
 |---|---|---|
 | Domain controller | `dc01.example.com` | or an `ldaps://` URI |
 | Base DN | `DC=example,DC=com` | |
+| User / computer search base | `OU=Staff,DC=example,DC=com` | optional, scopes searches to one OU |
 | Service account | `svc-ldap@example.com` | UPN or full DN |
 | Service account password | | stored in the keychain |
 | LDAPS port | `636` | `3269` for the Global Catalog |

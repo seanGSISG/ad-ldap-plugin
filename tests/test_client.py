@@ -92,11 +92,11 @@ def test_config_scoped_search_bases_when_set():
 
 
 @pytest.mark.parametrize("var", ["AD_USER_SEARCH_BASE", "AD_COMPUTER_SEARCH_BASE"])
-def test_config_scoped_search_base_blank_rejected(var):
-    # Present-but-blank is a mistake — fail loudly rather than silently using base_dn.
-    with pytest.raises(config_mod.ADConfigError) as exc:
-        ADConfig.from_env(_env(**{var: "   "}))
-    assert var in str(exc.value)
+def test_config_scoped_search_base_blank_means_unset(var):
+    # The plugin passes an empty setting as "", which must fall back to base_dn.
+    cfg = ADConfig.from_env(_env(**{var: "   "}))
+    assert cfg.effective_user_search_base == BASE_DN
+    assert cfg.effective_computer_search_base == BASE_DN
 
 
 def test_config_rejects_ssl_optout():

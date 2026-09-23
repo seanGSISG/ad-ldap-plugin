@@ -45,19 +45,14 @@ def _parse_bool(raw: str | None, *, default: bool, name: str) -> bool:
     raise ADConfigError(f"{name} must be a boolean (got {raw!r})")
 
 
-def _parse_optional_str(raw: str | None, *, name: str) -> str | None:
-    """Return a stripped non-empty string, or None when unset/blank.
+def _parse_optional_str(raw: str | None) -> str | None:
+    """Return a stripped non-empty string, or None when unset or blank.
 
-    A variable that is *present but blank/whitespace* is rejected: setting an
-    empty scoped search base is almost certainly a mistake, so fail loudly rather
-    than silently falling back to base_dn.
+    Blank means unset: the plugin passes every setting into the env, so a setting
+    the user left empty arrives as "" and must fall back to base_dn.
     """
-    if raw is None:
-        return None
-    value = raw.strip()
-    if value == "":
-        raise ADConfigError(f"{name} must be a non-empty string when set.")
-    return value
+    value = (raw or "").strip()
+    return value or None
 
 
 def _parse_int(raw: str | None, *, default: int, name: str) -> int:
@@ -131,10 +126,6 @@ class ADConfig:
             ca_certs=(env.get(ENV_CA_CERTS) or "").strip() or None,
             tls_validate=_parse_bool(env.get(ENV_TLS_VALIDATE), default=True, name=ENV_TLS_VALIDATE),
             page_size=_parse_int(env.get(ENV_PAGE_SIZE), default=500, name=ENV_PAGE_SIZE),
-            user_search_base=_parse_optional_str(
-                env.get(ENV_USER_SEARCH_BASE), name=ENV_USER_SEARCH_BASE
-            ),
-            computer_search_base=_parse_optional_str(
-                env.get(ENV_COMPUTER_SEARCH_BASE), name=ENV_COMPUTER_SEARCH_BASE
-            ),
+            user_search_base=_parse_optional_str(env.get(ENV_USER_SEARCH_BASE)),
+            computer_search_base=_parse_optional_str(env.get(ENV_COMPUTER_SEARCH_BASE)),
         )

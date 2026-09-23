@@ -1,7 +1,7 @@
 {
   "name": "ad-ldap",
   "displayName": "Active Directory (LDAP) Admin",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Active Directory administration over LDAPS for Claude Code: an MCP server (FastMCP + ldap3) with 15 tools, admin agents, slash commands, a safety skill, and a guard that refuses any AD write until the identical call has been dry-run first. Headline workflow: mass-assign computer managedBy from description-held owner names via a dry-run plan/review/apply loop.",
   "author": {
     "name": "seanGSISG"
@@ -26,6 +26,18 @@
       "type": "string",
       "title": "Base DN",
       "description": "Search base, e.g. DC=example,DC=com"
+    },
+    "user_search_base": {
+      "type": "string",
+      "title": "User search base (optional)",
+      "description": "Scope user searches and the bulk user index to one OU, e.g. OU=Staff,DC=example,DC=com. Blank = Base DN.",
+      "default": ""
+    },
+    "computer_search_base": {
+      "type": "string",
+      "title": "Computer search base (optional)",
+      "description": "Scope computer searches and the bulk sweep to one OU, e.g. OU=Workstations,DC=example,DC=com. Blank = Base DN.",
+      "default": ""
     },
     "bind_user": {
       "type": "string",
@@ -76,7 +88,9 @@
         "AD_BIND_PASSWORD": "${user_config.bind_password}",
         "AD_PORT": "${user_config.port}",
         "AD_CA_CERTS": "${user_config.ca_certs}",
-        "AD_TLS_VALIDATE": "${user_config.tls_validate}"
+        "AD_TLS_VALIDATE": "${user_config.tls_validate}",
+        "AD_USER_SEARCH_BASE": "${user_config.user_search_base}",
+        "AD_COMPUTER_SEARCH_BASE": "${user_config.computer_search_base}"
       }
     }
   }

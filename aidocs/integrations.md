@@ -56,8 +56,9 @@ installs, the manifest's `userConfig` (prompted at install) mapped into the `env
 ## Footguns
 
 1. **`AD_USE_SSL=false` is rejected** — don't try to "temporarily" disable TLS.
-2. **Empty scoped search base is rejected**: `AD_USER_SEARCH_BASE=""` (set but blank)
-   raises `ADConfigError` rather than silently falling back to `AD_BASE_DN`.
+2. **A blank scoped search base means unset**: `AD_USER_SEARCH_BASE=""` falls back to
+   `AD_BASE_DN`, because the plugin passes an empty setting as `""`. A typo'd OU is not
+   caught here; `ad_check_connection` and the first search will fail on it.
 3. **MOCK_SYNC can't evaluate `LDAP_MATCHING_RULE_BIT_AND`** (OID
    `1.2.840.113556.1.4.803`, used to filter disabled accounts) — it raises
    `LDAPAttributeError`. Tests assert filter strings instead; real AD evaluates it fine.
