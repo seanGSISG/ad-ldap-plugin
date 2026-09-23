@@ -1,0 +1,4 @@
+{
+  "description": "ad-write-guard: refuses an AD write until the identical call has been dry-run this session, then asks the user; refuses the call if the guard itself fails. Loads only where function hooks are enabled (CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1).",
+  "modules": ["./guard.ts"]
+}

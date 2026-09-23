@@ -1,0 +1,14 @@
+{
+  "name": "ad-ldap-plugin",
+  "description": "Active Directory administration over LDAPS for Claude Code",
+  "owner": {
+    "name": "seanGSISG"
+  },
+  "plugins": [
+    {
+      "name": "ad-ldap",
+      "source": "./",
+      "description": "Active Directory administration over LDAPS: MCP server, agents, commands, safety skill and a dry-run-first write guard"
+    }
+  ]
+}

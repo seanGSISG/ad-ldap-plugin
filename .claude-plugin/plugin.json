@@ -1,0 +1,83 @@
+{
+  "name": "ad-ldap",
+  "displayName": "Active Directory (LDAP) Admin",
+  "version": "1.1.0",
+  "description": "Active Directory administration over LDAPS for Claude Code: an MCP server (FastMCP + ldap3) with 15 tools, admin agents, slash commands, a safety skill, and a guard that refuses any AD write until the identical call has been dry-run, then asks you. Headline workflow: mass-assign computer managedBy from description-held owner names via a dry-run plan/review/apply loop.",
+  "author": {
+    "name": "seanGSISG"
+  },
+  "repository": "https://github.com/seanGSISG/ad-ldap-plugin",
+  "keywords": [
+    "active-directory",
+    "ldap",
+    "ldaps",
+    "ad",
+    "mcp",
+    "managedby"
+  ],
+  "license": "MIT",
+  "userConfig": {
+    "server": {
+      "type": "string",
+      "title": "Domain controller",
+      "description": "Hostname or ldaps:// URI of a domain controller, e.g. dc01.example.com"
+    },
+    "base_dn": {
+      "type": "string",
+      "title": "Base DN",
+      "description": "Search base, e.g. DC=example,DC=com"
+    },
+    "bind_user": {
+      "type": "string",
+      "title": "Service account",
+      "description": "UPN (svc-ldap@example.com) or full DN of the bind account"
+    },
+    "bind_password": {
+      "type": "string",
+      "title": "Service account password",
+      "description": "Stored in your OS keychain, never in settings.json",
+      "sensitive": true
+    },
+    "port": {
+      "type": "number",
+      "title": "LDAPS port",
+      "description": "636, or 3269 for the Global Catalog over SSL",
+      "default": 636
+    },
+    "ca_certs": {
+      "type": "string",
+      "title": "CA bundle path (optional)",
+      "description": "PEM file for the DC's certificate chain. Leave blank to use the system trust store.",
+      "default": ""
+    },
+    "tls_validate": {
+      "type": "boolean",
+      "title": "Validate the DC's certificate",
+      "description": "Turn off only for a self-signed lab DC",
+      "default": true
+    }
+  },
+  "mcpServers": {
+    "ad-ldap": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "${CLAUDE_PLUGIN_ROOT}",
+        "python",
+        "${CLAUDE_PLUGIN_ROOT}/mcp/server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "AD_SERVER": "${user_config.server}",
+        "AD_BASE_DN": "${user_config.base_dn}",
+        "AD_BIND_USER": "${user_config.bind_user}",
+        "AD_BIND_PASSWORD": "${user_config.bind_password}",
+        "AD_PORT": "${user_config.port}",
+        "AD_CA_CERTS": "${user_config.ca_certs}",
+        "AD_TLS_VALIDATE": "${user_config.tls_validate}"
+      }
+    }
+  }
+}

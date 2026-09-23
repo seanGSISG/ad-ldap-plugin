@@ -1,0 +1,41 @@
+# Permanent AD LDAP MCP server (HTTP transport).
+#
+#   docker compose build
+#   docker compose up -d          # long-lived; shows in `docker ps`
+#
+# Clients reach the bearer-protected MCP endpoint at:
+#   http://<this-host-lan-ip>:8001/mcp
+# presenting `Authorization: Bearer <MCP_BEARER_TOKEN>`.
+#
+# Credentials + bearer token come from .env (gitignored). The DC's CA bundle is
+# mounted read-only at the AD_CA_CERTS path baked into the image.
+services:
+  ad-ldap-mcp:
+    build:
+      context: .
+      target: production
+    image: ad-ldap-mcp:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Bind + CA path (override any host-specific AD_CA_CERTS in .env so it
+      # points at the mounted bundle the container can actually see).
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: "8000"
+      AD_CA_CERTS: /certs/ldap-ca.pem
+    ports:
+      # Host 8001 -> container 8000 (change the host side if 8001 is taken).
+      - "8001:8000"
+    volumes:
+      - ./cert/ldap-ca.pem:/certs/ldap-ca.pem:ro
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz').status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

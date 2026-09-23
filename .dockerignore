@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info/
+
+# Virtual environments
+.venv
+venv/
+ENV/
+
+# Secrets / local config — credentials and CA bundles must NEVER be baked in.
+# Mount these at runtime instead.
+.env
+*.env
+secrets.*
+*.key
+*.pem
+cert/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Docs, tests, tooling not needed in the image
+README.md
+DESIGN.md
+research/
+tests/
+scripts/
+agents/
+commands/
+skills/
+.claude/
+.claude-plugin/
+.temp/
+
+# Plan Cascade planning artifacts
+.worktree/
+.locks/
+.state/
+*.json
+!pyproject.toml
