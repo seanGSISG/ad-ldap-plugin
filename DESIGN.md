@@ -33,9 +33,13 @@ unmatched computers are skipped and reported for manual resolution. The `descrip
 - **Safety:** annotated + dry-run. Every write tool accepts `dry_run: bool = true` and returns a
   before→after diff without committing when true. Destructive tools carry `destructiveHint: true`.
   TLS validation defaults on; documented insecure opt-out for the self-signed lab DC.
-- **Write guard (function hooks):** `hooks/guard.ts` hooks `tool.call` on the 9 write tools. A
-  commit (`dry_run=false`, or `apply=true` for the bulk tool) is refused unless the identical call
-  (same target arguments, SHA-256 matched) dry-ran successfully this session. It never prompts, so
+- **Write guard (function hooks):** `hooks/guard.ts` decides on `tool.check` for the 9 write tools.
+  A commit (`dry_run=false`, or `apply=true` for the bulk tool) is refused unless the identical
+  call (same tool and target arguments, canonical-JSON matched) dry-ran successfully this session,
+  as the session's transcripts record it (the main loop's and every listed agent's). Calls from a
+  resumed transcript or from before a `/clear` don't count. It never hooks `tool.call`: while any
+  plugin does, Claude Code 2.1.282 runs tools outside an `isolation: "worktree"` subagent's cwd
+  context and refuses every Bash call there (fixed in 1.4.0, 2026-09-25). It never prompts, so
   batch agents and headless `claude -p` runs work; it holds in every permission mode and inside
   subagents, and its `.catch` refuses the call if the hook fails. It loads only where
   `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`; without it the server's dry-run defaults remain the
