@@ -23,6 +23,17 @@ Writes outside these lists are hard-rejected:
   `managedBy` is validated to resolve to an existing user/group before being set; an
   empty string clears it.
 
+## Write scope (`_require_within` in `mcp/ad_client.py`)
+
+Reads search the whole `AD_BASE_DN`, so an agent can find any account, including the bind
+account itself. Writes are narrower: every user write resolves its target, then refuses it
+(`PermissionError`, surfaced as a `ToolError`) unless it lies under `AD_USER_SEARCH_BASE`;
+`ad_set_computer_attributes` does the same with `AD_COMPUTER_SEARCH_BASE`. The check runs on the
+resolved DN, RDN by RDN with escapes decoded, so a DN identifier cannot bypass it. A name
+resolves inside the scope first, so an object elsewhere that shares its mail or name cannot
+shadow it. A manager or `managedBy` value is
+not the written object, so it may be any principal. Group membership writes have no scope.
+
 ## Tool annotation hints (from `DESIGN.md`)
 
 | Tool | destructiveHint | idempotentHint |

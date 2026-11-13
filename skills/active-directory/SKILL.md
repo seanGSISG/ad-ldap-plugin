@@ -49,6 +49,9 @@ password into chat, summaries, or logs. After a real reset, report only success 
   `ad_set_user_manager`. Empty string clears an attribute.
 - `ad_set_computer_attributes`: only `description` and `managedBy`. `managedBy` must resolve to an
   existing user or group (validated before writing).
+- **Write scope.** Reads find any object under `AD_BASE_DN`, but a user write refuses a target
+  outside `AD_USER_SEARCH_BASE` and a computer write one outside `AD_COMPUTER_SEARCH_BASE`, by
+  name or by DN. A manager or `managedBy` value may be any principal. Group writes have no scope.
 
 ## The bulk managedBy workflow: plan → review → apply
 
@@ -127,8 +130,8 @@ Config is via environment variables (injected by the plugin's `.mcp.json` `env` 
 | `AD_CA_CERTS` | no | — | path to a CA bundle for validation |
 | `AD_TLS_VALIDATE` | no | `true` | **lab opt-out:** set `false` for a self-signed lab DC |
 | `AD_PAGE_SIZE` | no | `500` | paged-search size for find_* |
-| `AD_USER_SEARCH_BASE` | no | `AD_BASE_DN` | scope user searches / bulk user-index to an OU |
-| `AD_COMPUTER_SEARCH_BASE` | no | `AD_BASE_DN` | scope computer searches / bulk sweep to an OU |
+| `AD_USER_SEARCH_BASE` | no | `AD_BASE_DN` | write scope for users and the bulk owner index (reads search all of `AD_BASE_DN`) |
+| `AD_COMPUTER_SEARCH_BASE` | no | `AD_BASE_DN` | write scope for computers and the bulk sweep (reads search all of `AD_BASE_DN`) |
 
 `ad_find_users` excludes disabled accounts by default; pass `include_disabled=true` to include them.
 `ad_get_user` returns any user looked up directly and adds an `account_disabled` boolean. The bulk

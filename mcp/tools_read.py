@@ -19,12 +19,16 @@ from config import ADConfigError
 
 
 def _handle(fn):
-    """Run a client call, mapping config/transport errors to clean ToolErrors."""
+    """Run a client call, mapping config/transport errors to clean ToolErrors.
+
+    ``LookupError`` (no such object) and ``PermissionError`` (a write target
+    outside its write scope) pass their message through unchanged.
+    """
     try:
         return fn()
     except ADConfigError as exc:
         raise ToolError(f"Configuration error: {exc}") from exc
-    except LookupError as exc:
+    except (LookupError, PermissionError) as exc:
         raise ToolError(str(exc)) from exc
     except ToolError:
         raise

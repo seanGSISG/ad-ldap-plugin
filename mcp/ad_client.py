@@ -11,6 +11,7 @@ Responsibilities for story-001:
 
 from __future__ import annotations
 
+import re
 import ssl
 from datetime import datetime, timezone
 from typing import Any, Mapping, NamedTuple, Sequence
@@ -198,6 +199,56 @@ def _dn_normalize(dn: str) -> str:
 def _dn_equal(a: str, b: str) -> bool:
     """Return True if two DN strings denote the same object (canonicalized)."""
     return _dn_normalize(a) == _dn_normalize(b)
+
+
+# An RFC 4514 escape: a backslash and either two hex digits (one UTF-8 byte) or one character.
+_DN_ESCAPE = re.compile(r"\\([0-9A-Fa-f]{2}|.)", re.DOTALL)
+
+
+def _dn_value(value: str) -> str:
+    """Decode the escapes of one RDN value and casefold it.
+
+    ldap3 keeps escapes as written, so ``Sales\\2C East`` and ``Sales\\, East``
+    differ as strings though they name the same OU; decoded, they compare equal.
+    """
+    raw, pos = bytearray(), 0
+    for match in _DN_ESCAPE.finditer(value):
+        token = match[1]
+        raw += value[pos:match.start()].encode() + (
+            bytes.fromhex(token) if len(token) == 2 else token.encode()
+        )
+        pos = match.end()
+    raw += value[pos:].encode()
+    return raw.decode("utf-8", "surrogateescape").casefold()
+
+
+def _dn_within(dn: str, base: str) -> bool:
+    """Return True if ``dn`` is ``base`` or an object below it.
+
+    Compares parsed, decoded RDNs case-insensitively from the root down, so an
+    escaped comma inside a value (``CN=Doe\\, John``) can never fake an OU
+    boundary the way a plain string-suffix test could.
+    """
+
+    def rdns(value: str) -> list[tuple[str, str]]:
+        return [(attr.casefold(), _dn_value(val)) for attr, val, _ in parse_dn(value, strip=True)]
+
+    dn_rdns, base_rdns = rdns(dn), rdns(base)
+    return len(dn_rdns) >= len(base_rdns) and dn_rdns[len(dn_rdns) - len(base_rdns):] == base_rdns
+
+
+def _require_within(dn: str, base: str, setting: str) -> str:
+    """Return ``dn`` when it lies under the write scope ``base``.
+
+    Raises ``PermissionError`` otherwise. Every write tool calls this on the
+    object it modifies, so the scope holds for a DN identifier too; ``setting``
+    names the config key in the error so the caller knows what limits it.
+    """
+    if not _dn_within(dn, base):
+        raise PermissionError(
+            f"Refusing to write {dn}: it is outside the write scope {base} ({setting})."
+        )
+    return dn
 
 
 def _raw_values(entry, attr: str) -> list:
@@ -497,9 +548,7 @@ class ADClient:
             "))"
         )
         brief_attrs = ("sAMAccountName", "displayName", "userPrincipalName", "mail")
-        rows = self.paged_search(
-            self.config.effective_user_search_base, ldap_filter, brief_attrs, limit=limit
-        )
+        rows = self.paged_search(self.config.base_dn, ldap_filter, brief_attrs, limit=limit)
         results = []
         for row in rows:
             results.append(
@@ -513,21 +562,28 @@ class ADClient:
             )
         return {"count": len(results), "users": results, "page_size": self.config.page_size}
 
+    def _find_user(self, identifier: str, attributes: Sequence[str], base: str):
+        """Find one user Entry by DN, sAMAccountName, UPN or mail.
+
+        A name is searched under ``base``; a DN is read as is. Raises
+        ``LookupError`` when no user matches.
+        """
+        if "=" in identifier:
+            return self._find_by_dn(identifier, "(objectClass=user)", attributes)
+        term = escape_filter_chars(identifier)
+        ldap_filter = (
+            "(&(objectClass=user)(!(objectClass=computer))(|"
+            f"(sAMAccountName={term})"
+            f"(userPrincipalName={term})"
+            f"(mail={term})"
+            "))"
+        )
+        return self._find_one(base, ldap_filter, attributes)
+
     def get_user(self, identifier: str) -> dict:
         """Fetch the agreed user attribute set plus computed password expiry."""
         attrs = tuple(USER_READ_ATTRIBUTES) + ("userAccountControl",)
-        if "=" in identifier:
-            entry = self._find_by_dn(identifier, "(objectClass=user)", attrs)
-        else:
-            term = escape_filter_chars(identifier)
-            ldap_filter = (
-                "(&(objectClass=user)(!(objectClass=computer))(|"
-                f"(sAMAccountName={term})"
-                f"(userPrincipalName={term})"
-                f"(mail={term})"
-                "))"
-            )
-            entry = self._find_one(self.config.effective_user_search_base, ldap_filter, attrs)
+        entry = self._find_user(identifier, attrs, self.config.base_dn)
 
         record = _entry_attributes(entry, USER_READ_ATTRIBUTES)
         expiry = self._password_expiry(entry)
@@ -577,9 +633,7 @@ class ADClient:
             "))"
         )
         brief_attrs = ("name", "dNSHostName", "operatingSystem")
-        rows = self.paged_search(
-            self.config.effective_computer_search_base, ldap_filter, brief_attrs, limit=limit
-        )
+        rows = self.paged_search(self.config.base_dn, ldap_filter, brief_attrs, limit=limit)
         results = []
         for row in rows:
             results.append(
@@ -592,49 +646,54 @@ class ADClient:
             )
         return {"count": len(results), "computers": results, "page_size": self.config.page_size}
 
+    def _find_computer(self, identifier: str, attributes: Sequence[str], base: str):
+        """Find one computer Entry by name (with or without ``$``), cn, dNSHostName
+        or DN. A name is searched under ``base``; a DN is read as is. Raises
+        ``LookupError`` when none matches.
+        """
+        if "=" in identifier:
+            return self._find_by_dn(identifier, "(objectClass=computer)", attributes)
+        name = identifier[:-1] if identifier.endswith("$") else identifier
+        term = escape_filter_chars(name)
+        sam = escape_filter_chars(name + "$")
+        ldap_filter = (
+            "(&(objectClass=computer)(|"
+            f"(name={term})"
+            f"(cn={term})"
+            f"(sAMAccountName={sam})"
+            f"(dNSHostName={term})"
+            "))"
+        )
+        return self._find_one(base, ldap_filter, attributes)
+
     def get_computer(self, identifier: str) -> dict:
         """Fetch the agreed computer attribute set including managedBy."""
-        if "=" in identifier:
-            entry = self._find_by_dn(identifier, "(objectClass=computer)", COMPUTER_READ_ATTRIBUTES)
-        else:
-            name = identifier[:-1] if identifier.endswith("$") else identifier
-            term = escape_filter_chars(name)
-            sam = escape_filter_chars(name + "$")
-            ldap_filter = (
-                "(&(objectClass=computer)(|"
-                f"(name={term})"
-                f"(cn={term})"
-                f"(sAMAccountName={sam})"
-                f"(dNSHostName={term})"
-                "))"
-            )
-            entry = self._find_one(
-                self.config.effective_computer_search_base, ldap_filter, COMPUTER_READ_ATTRIBUTES
-            )
+        entry = self._find_computer(identifier, COMPUTER_READ_ATTRIBUTES, self.config.base_dn)
         return _entry_attributes(entry, COMPUTER_READ_ATTRIBUTES)
 
-    def _resolve_computer_dn(self, identifier: str) -> str:
-        """Resolve a computer identifier (name with/without ``$``, cn, dNSHostName,
-        or DN) to its DN. Raises ``LookupError`` when no single computer matches.
+    def _resolve_dn(self, find, identifier: str, scope: str) -> str:
+        """Resolve an identifier to a DN with ``find`` (``_find_user`` or ``_find_computer``).
+
+        A match inside ``scope`` wins, so an object elsewhere that shares a mail
+        or a name cannot shadow it; otherwise the first match under base_dn.
+        Raises ``LookupError`` when nothing matches.
         """
         attrs = ("distinguishedName",)
-        if "=" in identifier:
-            entry = self._find_by_dn(identifier, "(objectClass=computer)", attrs)
-        else:
-            name = identifier[:-1] if identifier.endswith("$") else identifier
-            term = escape_filter_chars(name)
-            sam = escape_filter_chars(name + "$")
-            ldap_filter = (
-                "(&(objectClass=computer)(|"
-                f"(name={term})"
-                f"(cn={term})"
-                f"(sAMAccountName={sam})"
-                f"(dNSHostName={term})"
-                "))"
-            )
-            entry = self._find_one(self.config.effective_computer_search_base, ldap_filter, attrs)
-        dn = _first(_entry_attributes(entry, attrs)["distinguishedName"])
-        return dn or entry.entry_dn
+        try:
+            entry = find(identifier, attrs, scope)
+        except LookupError:
+            entry = find(identifier, attrs, self.config.base_dn)
+        return _first(_entry_attributes(entry, attrs)["distinguishedName"]) or entry.entry_dn
+
+    def _writable_computer_dn(self, identifier: str) -> str:
+        """Resolve the computer a write will modify to its DN.
+
+        Refuses (``PermissionError``) a computer outside computer_search_base, the
+        write scope; ``LookupError`` when no computer matches.
+        """
+        scope = self.config.effective_computer_search_base
+        dn = self._resolve_dn(self._find_computer, identifier, scope)
+        return _require_within(dn, scope, "computer_search_base")
 
     def _resolve_principal_dn(self, identifier: str) -> str:
         """Resolve an identifier to the DN of an existing **user OR group** object.
@@ -781,24 +840,25 @@ class ADClient:
     def _resolve_user_dn(self, identifier: str) -> str:
         """Resolve a user identifier (sAMAccountName/UPN/mail/DN) to its DN.
 
-        Raises ``LookupError`` if no single user object matches — used to bind a
-        write to a concrete object and to validate manager DNs before setting.
+        Prefers a user inside user_search_base, then any user under base_dn (see
+        :meth:`_resolve_dn`). Raises ``LookupError`` if no user matches. Used as
+        is to validate a manager value; :meth:`_writable_user_dn` adds the scope.
         """
-        attrs = ("distinguishedName",)
-        if "=" in identifier:
-            entry = self._find_by_dn(identifier, "(objectClass=user)", attrs)
-        else:
-            term = escape_filter_chars(identifier)
-            ldap_filter = (
-                "(&(objectClass=user)(!(objectClass=computer))(|"
-                f"(sAMAccountName={term})"
-                f"(userPrincipalName={term})"
-                f"(mail={term})"
-                "))"
-            )
-            entry = self._find_one(self.config.effective_user_search_base, ldap_filter, attrs)
-        dn = _first(_entry_attributes(entry, attrs)["distinguishedName"])
-        return dn or entry.entry_dn
+        return self._resolve_dn(
+            self._find_user, identifier, self.config.effective_user_search_base
+        )
+
+    def _writable_user_dn(self, identifier: str) -> str:
+        """Resolve the user a write will modify to its DN.
+
+        Refuses (``PermissionError``) a user outside user_search_base, the write
+        scope; ``LookupError`` when no user matches.
+        """
+        return _require_within(
+            self._resolve_user_dn(identifier),
+            self.config.effective_user_search_base,
+            "user_search_base",
+        )
 
     # ------------------------------------------------------------------ #
     # User write tools
@@ -825,7 +885,7 @@ class ADClient:
             )
         # Empty string clears the attribute ([] → MODIFY_REPLACE with no values).
         changes = {attr: ([] if value == "" else [value]) for attr, value in attributes.items()}
-        dn = self._resolve_user_dn(identifier)
+        dn = self._writable_user_dn(identifier)
         return self.diff_modify(dn, changes, dry_run=dry_run)
 
     def set_user_manager(
@@ -835,8 +895,10 @@ class ADClient:
 
         When setting, the supplied manager value is resolved and validated to be a
         real user object first; an unresolvable manager raises ``LookupError``.
+        Only the user is held to the write scope: the manager is a value, so it
+        may be any user under base_dn.
         """
-        dn = self._resolve_user_dn(identifier)
+        dn = self._writable_user_dn(identifier)
         if manager is None or manager == "":
             changes: dict[str, list] = {"manager": []}
         else:
@@ -862,7 +924,7 @@ class ADClient:
         ``dry_run`` (default) reports the planned action without contacting the
         DC — the cleartext password is never echoed back.
         """
-        dn = self._resolve_user_dn(identifier)
+        dn = self._writable_user_dn(identifier)
         planned = ["reset unicodePwd"]
         if force_change_at_logon:
             planned.append("set pwdLastSet=0 (force change at next logon)")
@@ -899,7 +961,7 @@ class ADClient:
         preserved. Idempotent: a no-op (already in the desired state) returns an
         empty diff and commits nothing.
         """
-        dn = self._resolve_user_dn(identifier)
+        dn = self._writable_user_dn(identifier)
         # Read the raw value once and reuse it as diff_modify's ``before`` so the
         # toggle and the before/after diff share a single round-trip. _raw_int
         # parses the same raw wire string the diff is computed against.
@@ -915,7 +977,7 @@ class ADClient:
 
     def unlock_account(self, identifier: str, *, dry_run: bool = True) -> dict:
         """Clear an account lockout by setting ``lockoutTime=0`` (idempotent)."""
-        dn = self._resolve_user_dn(identifier)
+        dn = self._writable_user_dn(identifier)
         return self.diff_modify(dn, {"lockoutTime": ["0"]}, dry_run=dry_run)
 
     # ------------------------------------------------------------------ #
@@ -954,7 +1016,7 @@ class ADClient:
                 changes[attr] = [self._resolve_principal_dn(value)]
             else:
                 changes[attr] = [value]
-        dn = self._resolve_computer_dn(identifier)
+        dn = self._writable_computer_dn(identifier)
         return self.diff_modify(dn, changes, dry_run=dry_run)
 
     # ------------------------------------------------------------------ #

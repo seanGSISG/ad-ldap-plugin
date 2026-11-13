@@ -21,7 +21,7 @@ excluded from repr; missing required vars fail loudly).
 | Var | Purpose |
 | --- | --- |
 | `AD_SERVER` | DC hostname or `ldaps://` URI |
-| `AD_BASE_DN` | Search base, e.g. `dc=example,dc=com` |
+| `AD_BASE_DN` | Domain root that every read searches, e.g. `dc=example,dc=com` |
 | `AD_BIND_USER` | Service account (UPN or DN) |
 | `AD_BIND_PASSWORD` | Service account password |
 
@@ -33,8 +33,8 @@ excluded from repr; missing required vars fail loudly).
 | `AD_TLS_VALIDATE` | `true` | Set false only for self-signed lab DCs |
 | `AD_CA_CERTS` | — | Path to CA bundle (optional if in system store) |
 | `AD_PAGE_SIZE` | `500` | Paged-search page size |
-| `AD_USER_SEARCH_BASE` | — | Scoped OU for user searches |
-| `AD_COMPUTER_SEARCH_BASE` | — | Scoped OU for computer searches |
+| `AD_USER_SEARCH_BASE` | — | Write scope for users (and the bulk owner index); reads ignore it |
+| `AD_COMPUTER_SEARCH_BASE` | — | Write scope for computers (and the bulk sweep); reads ignore it |
 
 ### HTTP transport only
 | Var | Default | Purpose |
@@ -56,9 +56,9 @@ installs, the manifest's `userConfig` (prompted at install) mapped into the `env
 ## Footguns
 
 1. **`AD_USE_SSL=false` is rejected** — don't try to "temporarily" disable TLS.
-2. **A blank scoped search base means unset**: `AD_USER_SEARCH_BASE=""` falls back to
+2. **A blank write scope means unset**: `AD_USER_SEARCH_BASE=""` falls back to
    `AD_BASE_DN`, because the plugin passes an empty setting as `""`. A typo'd OU is not
-   caught here; `ad_check_connection` and the first search will fail on it.
+   caught here; every user or computer write will be refused as outside it.
 3. **MOCK_SYNC can't evaluate `LDAP_MATCHING_RULE_BIT_AND`** (OID
    `1.2.840.113556.1.4.803`, used to filter disabled accounts) — it raises
    `LDAPAttributeError`. Tests assert filter strings instead; real AD evaluates it fine.
