@@ -419,3 +419,71 @@ def test_set_user_attributes_tool_rejects_bad_attribute_as_toolerror():
                 {"identifier": "jdoe", "attributes": {"description": "x"}},
             )
         )
+
+
+# --------------------------------------------------------------------------- #
+# Write scope: reads search the whole domain, user writes stay in user_search_base
+# --------------------------------------------------------------------------- #
+_USER_SCOPE = f"OU=Users,{BASE_DN}"  # where _add_user puts jdoe and boss
+
+
+def _scoped_client():
+    """jdoe and boss sit inside the user write scope; sa.svc sits outside it."""
+    conn = _build_conn()
+    _add_user(conn, cn="jdoe")
+    boss_dn = _add_user(conn, cn="boss")
+    svc_dn = f"CN=sa.svc,OU=Service Accounts,{BASE_DN}"
+    conn.strategy.add_entry(
+        svc_dn,
+        {"objectClass": ["user", "person"], "cn": ["sa.svc"], "sAMAccountName": ["sa.svc"],
+         "title": ["Service"], "userAccountControl": ["512"]},
+        validate=False,
+    )
+    conn.bind()
+    return _client(conn, AD_USER_SEARCH_BASE=_USER_SCOPE), conn, svc_dn, boss_dn
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda c, who: c.set_user_attributes(who, {"title": "x"}),
+        lambda c, who: c.set_user_manager(who, "jdoe"),
+        lambda c, who: c.reset_password(who, "N3w-Passw0rd!"),
+        lambda c, who: c.set_account_status(who, False),
+        lambda c, who: c.unlock_account(who),
+    ],
+    ids=["attributes", "manager", "password", "status", "unlock"],
+)
+@pytest.mark.parametrize("by", ["name", "dn"])
+def test_user_writes_refuse_target_outside_user_search_base(call, by):
+    client, conn, svc_dn, _ = _scoped_client()
+    with pytest.raises(PermissionError, match="user_search_base"):
+        call(client, "sa.svc" if by == "name" else svc_dn)
+    assert _read(conn, svc_dn, "title") == "Service"
+
+
+def test_user_write_inside_user_search_base_still_commits():
+    client, _, _, _ = _scoped_client()
+    out = client.set_user_attributes("jdoe", {"title": "Director"}, dry_run=False)
+    assert out["committed"] is True
+
+
+def test_set_user_manager_accepts_manager_outside_user_search_base():
+    # The manager is a value, not the written object, so it is a read.
+    client, _, svc_dn, _ = _scoped_client()
+    out = client.set_user_manager("jdoe", "sa.svc", dry_run=True)
+    assert out["changes"]["manager"]["after"] == [svc_dn]
+
+
+def test_out_of_scope_write_is_a_clean_toolerror():
+    from fastmcp.exceptions import ToolError
+
+    client, _, _, _ = _scoped_client()
+    app.set_client(client)
+    with pytest.raises(ToolError, match="outside the write scope"):
+        asyncio.run(
+            app.mcp.call_tool(
+                "ad_set_user_attributes",
+                {"identifier": "sa.svc", "attributes": {"title": "x"}},
+            )
+        )

@@ -41,6 +41,7 @@ Code plugin (stdio) and as a Docker container (HTTP + bearer token). 15 `ad_*` t
 - **LDAPS is mandatory** — `AD_USE_SSL=false` is rejected in `config.py`; never add a plaintext LDAP path.
 - **All write tools default to `dry_run=True`** and route through `ADClient.diff_modify()`; never call `connection.modify()` directly from a tool.
 - Writes are restricted to the attribute whitelists in `ad_client.py` (`USER_WRITABLE_ATTRIBUTES`, `COMPUTER_WRITABLE_ATTRIBUTES`); don't widen them casually.
+- Reads search all of `base_dn`; a write tool resolves the object it modifies through `_writable_user_dn` / `_writable_computer_dn`, which refuse a target outside `user_search_base` / `computer_search_base`. Never resolve a write target any other way.
 - Never log, echo, or return passwords; never copy `.env` values into code, docs, or tests.
 - Run `uv run pytest tests/ -q` (and `claude plugin test .` if `hooks/` changed) before considering a change done.
 

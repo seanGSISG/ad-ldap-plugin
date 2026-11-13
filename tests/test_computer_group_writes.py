@@ -396,7 +396,7 @@ def test_dn_form_lookup_uses_base_scope_not_subtree():
     conn.bind()
     client = _client(conn)
     with pytest.raises(LookupError):
-        client._resolve_computer_dn(container_dn)
+        client._writable_computer_dn(container_dn)
 
 
 def test_membership_noop_canonicalizes_attribute_type_case():
@@ -416,3 +416,26 @@ def test_membership_noop_canonicalizes_attribute_type_case():
     assert out["committed"] is False
     # Unchanged: no duplicate member appended.
     assert _read_raw(conn, group_dn, "member") == [lowered.encode()]
+
+
+# --------------------------------------------------------------------------- #
+# Write scope: computer writes stay in computer_search_base
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("by", ["name", "dn"])
+def test_set_computer_attributes_refuses_computer_outside_scope(by):
+    conn, _user_dn, _group_dn, _comp_dn = _scenario()
+    server_dn = f"CN=SRV01,OU=Servers,{BASE_DN}"
+    conn.strategy.add_entry(
+        server_dn,
+        {"objectClass": ["computer"], "cn": ["SRV01"], "name": ["SRV01"],
+         "sAMAccountName": ["SRV01$"], "description": ["server"]},
+        validate=False,
+    )
+    client = _client(conn, AD_COMPUTER_SEARCH_BASE=f"OU=Computers,{BASE_DN}")
+    with pytest.raises(PermissionError, match="computer_search_base"):
+        client.set_computer_attributes(
+            "SRV01" if by == "name" else server_dn, {"description": "x"}, dry_run=False
+        )
+    assert _read_raw(conn, server_dn, "description") == [b"server"]
+    # The in-scope computer is still writable.
+    assert client.set_computer_attributes("PC01", {"description": "x"})["changes"]

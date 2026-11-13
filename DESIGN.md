@@ -29,7 +29,7 @@ unmatched computers are skipped and reported for manual resolution. The `descrip
     `AD_BIND_USER` (UPN or DN), `AD_BIND_PASSWORD`, `AD_USE_SSL` (default true),
     `AD_CA_CERTS` (path to CA bundle, optional), `AD_TLS_VALIDATE` (default true; lab opt-out),
     `AD_PAGE_SIZE` (default 500), `AD_USER_SEARCH_BASE` / `AD_COMPUTER_SEARCH_BASE`
-    (optional scoped search bases, default to `AD_BASE_DN`).
+    (optional write scopes, default to `AD_BASE_DN`; reads always search all of `AD_BASE_DN`).
 - **Safety:** annotated + dry-run. Every write tool accepts `dry_run: bool = true` and returns a
   before→after diff without committing when true. Destructive tools carry `destructiveHint: true`.
   TLS validation defaults on; documented insecure opt-out for the self-signed lab DC.

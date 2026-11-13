@@ -379,45 +379,56 @@ def test_get_user_account_disabled_false():
 
 
 # --------------------------------------------------------------------------- #
-# Scoped search bases (Feature 2)
+# Reads search the whole domain, whatever the write scopes are
 # --------------------------------------------------------------------------- #
 
-def test_find_users_uses_user_search_base_when_set(monkeypatch):
-    user_base = f"OU=_Users,{BASE_DN}"
+# A service account outside the user write scope: the case that made an agent
+# conclude sa.midpoint did not exist while it was the MCP's own bind account.
+_SCOPES = {
+    "AD_USER_SEARCH_BASE": f"OU=_Users,{BASE_DN}",
+    "AD_COMPUTER_SEARCH_BASE": f"OU=_Computers,{BASE_DN}",
+}
+_SVC_DN = f"CN=Service Account MidPoint,OU=Service Accounts,{BASE_DN}"
+_SERVER_DN = f"CN=SRV01,OU=Servers,{BASE_DN}"
+
+
+def _scoped_directory():
     conn = _build_conn()
+    conn.strategy.add_entry(
+        _SVC_DN,
+        {
+            "objectClass": ["user", "person"],
+            "cn": ["Service Account MidPoint"],
+            "sAMAccountName": ["sa.midpoint"],
+            "displayName": ["Service Account MidPoint"],
+            "userAccountControl": ["66048"],
+            "pwdLastSet": [str(NOW_FILETIME)],
+        },
+        validate=False,
+    )
+    conn.strategy.add_entry(
+        _SERVER_DN,
+        {"objectClass": ["computer"], "cn": ["SRV01"], "name": ["SRV01"],
+         "sAMAccountName": ["SRV01$"]},
+        validate=False,
+    )
     conn.bind()
-    client = _client(conn, AD_USER_SEARCH_BASE=user_base)
-    captured = _filter_spy(conn, monkeypatch)
-    client.find_users("alice", include_disabled=True)
-    assert captured["search_base"] == user_base
+    return _client(conn, **_SCOPES)
 
 
-def test_find_users_falls_back_to_base_dn(monkeypatch):
-    conn = _build_conn()
-    conn.bind()
-    client = _client(conn)  # no scoped base
-    captured = _filter_spy(conn, monkeypatch)
-    client.find_users("alice", include_disabled=True)
-    assert captured["search_base"] == BASE_DN
+def test_find_users_finds_user_outside_user_search_base():
+    out = _scoped_directory().find_users("midpoint", include_disabled=True)
+    assert [u["dn"] for u in out["users"]] == [_SVC_DN]
 
 
-def test_find_computers_uses_computer_search_base_when_set(monkeypatch):
-    comp_base = f"OU=_Computers,{BASE_DN}"
-    conn = _build_conn()
-    conn.bind()
-    client = _client(conn, AD_COMPUTER_SEARCH_BASE=comp_base)
-    captured = _filter_spy(conn, monkeypatch)
-    client.find_computers("WS0")
-    assert captured["search_base"] == comp_base
+def test_get_user_by_name_finds_user_outside_user_search_base():
+    assert _scoped_directory().get_user("sa.midpoint")["sAMAccountName"] == ["sa.midpoint"]
 
 
-def test_find_computers_falls_back_to_base_dn(monkeypatch):
-    conn = _build_conn()
-    conn.bind()
-    client = _client(conn)
-    captured = _filter_spy(conn, monkeypatch)
-    client.find_computers("WS0")
-    assert captured["search_base"] == BASE_DN
+def test_find_and_get_computer_outside_computer_search_base():
+    client = _scoped_directory()
+    assert [c["dn"] for c in client.find_computers("SRV")["computers"]] == [_SERVER_DN]
+    assert client.get_computer("SRV01$")["name"] == ["SRV01"]
 
 
 # --------------------------------------------------------------------------- #

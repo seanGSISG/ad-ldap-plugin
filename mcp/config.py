@@ -78,20 +78,22 @@ class ADConfig:
     ca_certs: str | None = None
     tls_validate: bool = True
     page_size: int = 500
-    # Optional scoped search bases. When set, find_users/get_user-by-name and the
-    # bulk user-index build search user_search_base; find_computers and the bulk
-    # computer sweep search computer_search_base. Both default to base_dn.
+    # Optional write scopes. Read tools always search all of base_dn. A write
+    # tool refuses a user outside user_search_base or a computer outside
+    # computer_search_base, and the bulk managedBy workflow builds its owner
+    # index from user_search_base and sweeps computer_search_base. Both default
+    # to base_dn. Group writes have no scope of their own.
     user_search_base: str | None = None
     computer_search_base: str | None = None
 
     @property
     def effective_user_search_base(self) -> str:
-        """The base to search for user objects (user_search_base or base_dn)."""
+        """The write scope for user objects (user_search_base or base_dn)."""
         return self.user_search_base or self.base_dn
 
     @property
     def effective_computer_search_base(self) -> str:
-        """The base to search for computer objects (computer_search_base or base_dn)."""
+        """The write scope for computer objects (computer_search_base or base_dn)."""
         return self.computer_search_base or self.base_dn
 
     @classmethod

@@ -29,7 +29,7 @@ Terms that actually appear in this codebase, for newcomers to Active Directory.
 | FILETIME | Windows timestamp: 100-ns ticks since 1601-01-01 (`_FILETIME_EPOCH`, `_TICKS_PER_DAY` in `ad_client.py`). Used for password-expiry math. |
 | Paged search | LDAP simple-paged-results control; `AD_PAGE_SIZE` (default 500) bounds each page. All searches go through the client's paging helper. |
 | Global Catalog | Forest-wide partial-attribute search on port 3269 (SSL). |
-| Search base / scoped OU | `AD_BASE_DN` is the root; `AD_USER_SEARCH_BASE` / `AD_COMPUTER_SEARCH_BASE` optionally narrow searches to an OU. |
+| Base DN / write scope | `AD_BASE_DN` is the root, and every read searches all of it. `AD_USER_SEARCH_BASE` / `AD_COMPUTER_SEARCH_BASE` are the write scopes: a user or computer write outside them is refused, and the bulk workflow stays inside them. |
 
 ## Project-specific terms
 

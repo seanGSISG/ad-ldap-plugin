@@ -13,7 +13,7 @@ from ldap3 import BASE, MOCK_SYNC, OFFLINE_AD_2012_R2, Connection, Server
 
 import config as config_mod
 from config import ADConfig
-from ad_client import ADClient, compute_diff
+from ad_client import ADClient, _dn_within, compute_diff
 
 
 BASE_DN = "DC=lab,DC=example,DC=com"
@@ -242,3 +242,19 @@ def test_check_connection_reports_server_and_bind(mock_client):
     # whoami present as a key even when the mock can't answer it.
     assert "whoami" in info
     assert "server_info" in info
+
+
+@pytest.mark.parametrize(
+    "dn,base,expected",
+    [
+        ("CN=a,OU=_Users,DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", True),
+        ("CN=a,ou=_users, dc=PMP,DC=com", "OU=_Users,DC=pmp,DC=com", True),  # case, spaces
+        ("OU=_Users,DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", True),  # the base itself
+        ("CN=a,OU=Service Accounts,DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", False),
+        ("CN=a,OU=x_Users,DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", False),  # no substring match
+        (r"CN=a\,OU\=_Users,DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", False),  # escaped comma
+        ("DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", False),  # a parent is not inside
+    ],
+)
+def test_dn_within_compares_whole_rdns(dn, base, expected):
+    assert _dn_within(dn, base) is expected
