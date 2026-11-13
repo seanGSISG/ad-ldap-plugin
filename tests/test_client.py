@@ -254,6 +254,8 @@ def test_check_connection_reports_server_and_bind(mock_client):
         ("CN=a,OU=x_Users,DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", False),  # no substring match
         (r"CN=a\,OU\=_Users,DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", False),  # escaped comma
         ("DC=pmp,DC=com", "OU=_Users,DC=pmp,DC=com", False),  # a parent is not inside
+        (r"CN=a,OU=Sales\, East,DC=pmp,DC=com", r"OU=Sales\2C East,DC=pmp,DC=com", True),  # hex vs char escape
+        (r"CN=a,OU=Ren\C3\A9,DC=pmp,DC=com", "OU=René,DC=pmp,DC=com", True),  # UTF-8 hex escape
     ],
 )
 def test_dn_within_compares_whole_rdns(dn, base, expected):

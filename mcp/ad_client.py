@@ -11,6 +11,7 @@ Responsibilities for story-001:
 
 from __future__ import annotations
 
+import re
 import ssl
 from datetime import datetime, timezone
 from typing import Any, Mapping, NamedTuple, Sequence
@@ -200,16 +201,37 @@ def _dn_equal(a: str, b: str) -> bool:
     return _dn_normalize(a) == _dn_normalize(b)
 
 
+# An RFC 4514 escape: a backslash and either two hex digits (one UTF-8 byte) or one character.
+_DN_ESCAPE = re.compile(r"\\([0-9A-Fa-f]{2}|.)", re.DOTALL)
+
+
+def _dn_value(value: str) -> str:
+    """Decode the escapes of one RDN value and casefold it.
+
+    ldap3 keeps escapes as written, so ``Sales\\2C East`` and ``Sales\\, East``
+    differ as strings though they name the same OU; decoded, they compare equal.
+    """
+    raw, pos = bytearray(), 0
+    for match in _DN_ESCAPE.finditer(value):
+        token = match[1]
+        raw += value[pos:match.start()].encode() + (
+            bytes.fromhex(token) if len(token) == 2 else token.encode()
+        )
+        pos = match.end()
+    raw += value[pos:].encode()
+    return raw.decode("utf-8", "surrogateescape").casefold()
+
+
 def _dn_within(dn: str, base: str) -> bool:
     """Return True if ``dn`` is ``base`` or an object below it.
 
-    Compares parsed RDNs case-insensitively from the root down, so an escaped
-    comma inside a value (``CN=Doe\\, John``) can never fake an OU boundary the
-    way a plain string-suffix test could.
+    Compares parsed, decoded RDNs case-insensitively from the root down, so an
+    escaped comma inside a value (``CN=Doe\\, John``) can never fake an OU
+    boundary the way a plain string-suffix test could.
     """
 
     def rdns(value: str) -> list[tuple[str, str]]:
-        return [(attr.casefold(), val.casefold()) for attr, val, _ in parse_dn(value, strip=True)]
+        return [(attr.casefold(), _dn_value(val)) for attr, val, _ in parse_dn(value, strip=True)]
 
     dn_rdns, base_rdns = rdns(dn), rdns(base)
     return len(dn_rdns) >= len(base_rdns) and dn_rdns[len(dn_rdns) - len(base_rdns):] == base_rdns
@@ -540,11 +562,11 @@ class ADClient:
             )
         return {"count": len(results), "users": results, "page_size": self.config.page_size}
 
-    def _find_user(self, identifier: str, attributes: Sequence[str]):
-        """Find one user Entry by DN, sAMAccountName, UPN or mail anywhere under base_dn.
+    def _find_user(self, identifier: str, attributes: Sequence[str], base: str):
+        """Find one user Entry by DN, sAMAccountName, UPN or mail.
 
-        Raises ``LookupError`` when no user matches. A read: write tools add
-        :func:`_require_within` on top (see :meth:`_writable_user_dn`).
+        A name is searched under ``base``; a DN is read as is. Raises
+        ``LookupError`` when no user matches.
         """
         if "=" in identifier:
             return self._find_by_dn(identifier, "(objectClass=user)", attributes)
@@ -556,12 +578,12 @@ class ADClient:
             f"(mail={term})"
             "))"
         )
-        return self._find_one(self.config.base_dn, ldap_filter, attributes)
+        return self._find_one(base, ldap_filter, attributes)
 
     def get_user(self, identifier: str) -> dict:
         """Fetch the agreed user attribute set plus computed password expiry."""
         attrs = tuple(USER_READ_ATTRIBUTES) + ("userAccountControl",)
-        entry = self._find_user(identifier, attrs)
+        entry = self._find_user(identifier, attrs, self.config.base_dn)
 
         record = _entry_attributes(entry, USER_READ_ATTRIBUTES)
         expiry = self._password_expiry(entry)
@@ -624,9 +646,10 @@ class ADClient:
             )
         return {"count": len(results), "computers": results, "page_size": self.config.page_size}
 
-    def _find_computer(self, identifier: str, attributes: Sequence[str]):
+    def _find_computer(self, identifier: str, attributes: Sequence[str], base: str):
         """Find one computer Entry by name (with or without ``$``), cn, dNSHostName
-        or DN anywhere under base_dn. Raises ``LookupError`` when none matches.
+        or DN. A name is searched under ``base``; a DN is read as is. Raises
+        ``LookupError`` when none matches.
         """
         if "=" in identifier:
             return self._find_by_dn(identifier, "(objectClass=computer)", attributes)
@@ -641,12 +664,26 @@ class ADClient:
             f"(dNSHostName={term})"
             "))"
         )
-        return self._find_one(self.config.base_dn, ldap_filter, attributes)
+        return self._find_one(base, ldap_filter, attributes)
 
     def get_computer(self, identifier: str) -> dict:
         """Fetch the agreed computer attribute set including managedBy."""
-        entry = self._find_computer(identifier, COMPUTER_READ_ATTRIBUTES)
+        entry = self._find_computer(identifier, COMPUTER_READ_ATTRIBUTES, self.config.base_dn)
         return _entry_attributes(entry, COMPUTER_READ_ATTRIBUTES)
+
+    def _resolve_dn(self, find, identifier: str, scope: str) -> str:
+        """Resolve an identifier to a DN with ``find`` (``_find_user`` or ``_find_computer``).
+
+        A match inside ``scope`` wins, so an object elsewhere that shares a mail
+        or a name cannot shadow it; otherwise the first match under base_dn.
+        Raises ``LookupError`` when nothing matches.
+        """
+        attrs = ("distinguishedName",)
+        try:
+            entry = find(identifier, attrs, scope)
+        except LookupError:
+            entry = find(identifier, attrs, self.config.base_dn)
+        return _first(_entry_attributes(entry, attrs)["distinguishedName"]) or entry.entry_dn
 
     def _writable_computer_dn(self, identifier: str) -> str:
         """Resolve the computer a write will modify to its DN.
@@ -654,12 +691,9 @@ class ADClient:
         Refuses (``PermissionError``) a computer outside computer_search_base, the
         write scope; ``LookupError`` when no computer matches.
         """
-        attrs = ("distinguishedName",)
-        entry = self._find_computer(identifier, attrs)
-        dn = _first(_entry_attributes(entry, attrs)["distinguishedName"]) or entry.entry_dn
-        return _require_within(
-            dn, self.config.effective_computer_search_base, "computer_search_base"
-        )
+        scope = self.config.effective_computer_search_base
+        dn = self._resolve_dn(self._find_computer, identifier, scope)
+        return _require_within(dn, scope, "computer_search_base")
 
     def _resolve_principal_dn(self, identifier: str) -> str:
         """Resolve an identifier to the DN of an existing **user OR group** object.
@@ -804,15 +838,15 @@ class ADClient:
         return result
 
     def _resolve_user_dn(self, identifier: str) -> str:
-        """Resolve a user identifier (sAMAccountName/UPN/mail/DN) under base_dn to its DN.
+        """Resolve a user identifier (sAMAccountName/UPN/mail/DN) to its DN.
 
-        Raises ``LookupError`` if no single user object matches. Used as is to
-        validate a manager value; :meth:`_writable_user_dn` adds the write scope.
+        Prefers a user inside user_search_base, then any user under base_dn (see
+        :meth:`_resolve_dn`). Raises ``LookupError`` if no user matches. Used as
+        is to validate a manager value; :meth:`_writable_user_dn` adds the scope.
         """
-        attrs = ("distinguishedName",)
-        entry = self._find_user(identifier, attrs)
-        dn = _first(_entry_attributes(entry, attrs)["distinguishedName"])
-        return dn or entry.entry_dn
+        return self._resolve_dn(
+            self._find_user, identifier, self.config.effective_user_search_base
+        )
 
     def _writable_user_dn(self, identifier: str) -> str:
         """Resolve the user a write will modify to its DN.

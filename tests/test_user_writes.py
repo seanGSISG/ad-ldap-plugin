@@ -23,7 +23,7 @@ and we assert on the quoted-UTF-16-LE bytes the mock actually stores.
 import asyncio
 
 import pytest
-from ldap3 import MOCK_SYNC, OFFLINE_AD_2012_R2, Connection, Server
+from ldap3 import BASE, MOCK_SYNC, OFFLINE_AD_2012_R2, Connection, Server
 from ldap3.protocol.rfc4512 import AttributeTypeInfo
 
 import app
@@ -487,3 +487,30 @@ def test_out_of_scope_write_is_a_clean_toolerror():
                 {"identifier": "sa.svc", "attributes": {"title": "x"}},
             )
         )
+
+
+def test_user_write_by_shared_mail_picks_the_user_inside_the_scope(monkeypatch):
+    # mail is not unique in AD: an out-of-scope user that shares it must not
+    # block the in-scope user, even when a domain-wide search returns it first.
+    conn = _build_conn()
+    svc_dn = f"CN=sa.help,OU=Service Accounts,{BASE_DN}"
+    conn.strategy.add_entry(
+        svc_dn,
+        {"objectClass": ["user", "person"], "cn": ["sa.help"], "sAMAccountName": ["sa.help"],
+         "mail": ["help@lab.example.com"], "userAccountControl": ["512"]},
+        validate=False,
+    )
+    staff_dn = _add_user(conn, cn="helpdesk", mail=["help@lab.example.com"])
+    conn.bind()
+    client = _client(conn, AD_USER_SEARCH_BASE=_USER_SCOPE)
+
+    # The mock's result order is random; pin the worst case a DC can return.
+    real_find_one = client._find_one
+
+    def svc_first_under_base_dn(base, ldap_filter, attributes, **kwargs):
+        if base == BASE_DN:
+            return real_find_one(svc_dn, "(objectClass=*)", attributes, scope=BASE)
+        return real_find_one(base, ldap_filter, attributes, **kwargs)
+
+    monkeypatch.setattr(client, "_find_one", svc_first_under_base_dn)
+    assert client.set_user_attributes("help@lab.example.com", {"title": "x"})["dn"] == staff_dn
